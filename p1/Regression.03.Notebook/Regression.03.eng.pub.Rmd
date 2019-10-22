@@ -1,0 +1,455 @@
+---
+output:
+  pdf_document: default
+  html_document: default
+---
+# Regression 03 
+
+# A. Shrinkage (regularization) methods 
+# B. Orthogonalization methods
+
+##### Josep Fortiana 2019-10-15
+
+Both families of methods are applicable when there are many predictors, possibly multicollinear. 
+
+Shrinkage, or regularization, methods replace the ordinary least squares condition with penalized least squares, where the penalty term purpose is to diminish the regression coefficients variance (dispersion, unstability). This is the shrinkage in the name.
+
+Orthogonalization methods replace the set of observed predictor variables with a new set of orthogonal variables, derived as linear combinations of the old ones in such a way that the _prediction space,_ that is, the space of columns of $X$, the regression matrix is conserved.
+
+In this laboratory we see two shrinkage methods: Ridge regression and the Lasso, and two orthogonalization methods, Principal Components Regression (PCR) and Partial Least Squares (PLS).
+
+# A1. Ridge regression
+
+##  1. Longley dataset and the `lm.ridge` function in the `MASS`  package
+
+```{r}
+require(MASS)
+data(longley)
+str(longley)
+```
+
+```{r}
+longley.ridge.1<-lm.ridge(Employed ~ .,data=longley)
+str(longley.ridge.1)
+```
+
+```{r}
+coefficients(longley.ridge.1)
+```
+
+```{r}
+longley.ridge.1$scales
+```
+
+```{r}
+print(longley.ridge.1)
+```
+
+```{r}
+summary(longley.ridge.1)
+```
+
+`kHKB` is an estimate of the optimal $\lambda$, proposed by Hoerl, Kennard and Baldwin (1975). `kLW` is another estimate, proposed by Lawless, Wang (1976). `GCV` is the Generalized Cross-Validation statistic evaluated for each of the $\lambda$ values being tested.
+
+```{r}
+longley.ridge<-lm.ridge(Employed ~ .,data=longley,lambda=seq(0,0.1,by=0.001))
+options(repr.plot.width=5, repr.plot.height=5)
+plot(longley.ridge)
+```
+
+```{r}
+select(longley.ridge)
+```
+
+The `broom` package has functions to gather and visualize the output of `lm.ridge` 
+
+```{r}
+#install.packages("broom",dependencies=TRUE,repos="https://cloud.r-project.org")
+require(broom)
+```
+
+```{r}
+# tidy(longley.ridge) 
+# long output
+```
+
+```{r}
+glance(longley.ridge)
+```
+
+## 2. Acetylene dataset and the  `genridge`  package by Michael Friendly
+
+```{r}
+#install.packages("genridge",dependencies=TRUE,repos="https://cloud.r-project.org")
+#install.packages("car",dependencies=TRUE,repos="https://cloud.r-project.org")
+require(genridge)
+require(car)
+```
+
+The `genridge` package includes the `Acetylene` dataset, with new variable names. We recover the linear model we tried above on these data and then we try a second linear model with quadratic terms. As a matter of fact this dataset originates from the paper: Marquardt, Donald W. and Snee, Ronald D. (1975), _"Ridge Regression in Practice",_ The American Statistician, Vol. 29, No. 1, pp. 3-20. Un this paper the authors start with the model with all six quadratic terms:
+
+$$
+ \text{temp}^2,\mskip10mu \text{ratio}^2,\mskip10mu \text{time}^2,\mskip10mu \text{temp}\cdot\text{ratio},\mskip10mu \text{temp}\cdot\text{time},\mskip10mu\text{ratio}\cdot \text{time}.
+$$
+
+```{r}
+data(Acetylene)
+str(Acetylene)
+```
+
+```{r}
+# Same model as above, with only linear terms (main effects)
+Acetylene.lm1<-lm(yield~temp+ratio+time,data=Acetylene)
+summary(Acetylene.lm1)
+```
+
+```{r}
+vif(Acetylene.lm1)
+X.Acetylene.lm1<-model.matrix(Acetylene.lm1)
+kappa(X.Acetylene.lm1)
+```
+
+```{r}
+# Model from the original paper by Marquardt and Snee
+Acetylene.lm2 <- lm(yield ~ temp + ratio + time + I(temp^2)+ I(ratio^2)+ I(time^2) 
+                    + temp:ratio+temp:time+ratio:time, data=Acetylene)
+summary(Acetylene.lm2)
+```
+
+```{r}
+vif(Acetylene.lm2)
+X.Acetylene.lm2<-model.matrix(Acetylene.lm2)
+kappa(X.Acetylene.lm2)
+```
+
+```{r}
+# A third model, with fewer quadratic terms, used by Michael Friendly to illustrate genridge
+Acetylene.lm3 <- lm(yield ~ temp + ratio + time + I(time^2) + temp:time, data=Acetylene)
+summary(Acetylene.lm3)
+```
+
+```{r}
+vif(Acetylene.lm3)
+X.Acetylene.lm3<-model.matrix(Acetylene.lm3)
+kappa(X.Acetylene.lm3)
+```
+
+```{r}
+# Ridge regression with the ridge function from genridge
+y<- Acetylene[,"yield"]
+X0<-X.Acetylene.lm3[,-1]
+lambda <- c(0, 0.0005, 0.001, 0.002, 0.005, 0.01)
+Acetylene.ridge.1 <- ridge(y, X0, lambda=lambda)
+summary(Acetylene.ridge.1)
+```
+
+```{r}
+traceplot(Acetylene.ridge.1)
+```
+
+```{r}
+traceplot(Acetylene.ridge.1, X="df")
+```
+
+```{r}
+pairs(Acetylene.ridge.1, radius=0.2)
+```
+
+## 3. The Fearn dataset
+
+A dataset from the paper by Fearn, T. (1983), _A Misuse of Ridge Regression in the Calibration of a Near Infrared Reflectance Instrument,_ Journal of the Royal Statistical Society. Series C (Applied Statistics), Vol. 32, No. 1(1983), pp. 73-79. This paper, with intended controversial title and contents, found its rebuttal in the paper by Hoerl, Arthur E., Kennard, Robert W.  and Hoerl, Roger W. (1985), _Practical Use of Ridge Regression: A Challenge Met,_ Journal of the Royal Statistical Society. Series C (Applied Statistics), Vol. 34, No. 2(1985), pp. 114-120.
+
+```{r}
+Fearn.1<-read.table("Fearn.data.1.txt", header=TRUE)
+Fearn.2<-read.table("Fearn.data.2.txt", header=TRUE)
+str(Fearn.1)
+str(Fearn.2)
+```
+
+Adjust the regression `y~x1+x2+x3+x4+x5+x6` with the Fearn dataset and:
+
+1. Ordinary Least Squares (OLS), selecting the best predictors subset
+
+2. Ridge regression
+
+Compare prediction errors. Which one is better?
+
+3. After working through the following section on the lasso, repeat with this method.
+
+NOTE: the data frames `Fearn.1` and `Fearn.2` were used as train and test subsets in the original paper. You may choose to follow this selection or merge both subsets and partition the joint dataset in some other way.
+
+## 4. The `Hitters` dataset in the `ISLR` package 
+
+### Ridge regression following ISLR - Chap 6 - Laboratory 2 - Using the `glmnet` package
+
+[Code from the ISLR website](http://www-bcf.usc.edu/~gareth/ISL/Chapter%206%20Labs.txt)
+
+```{r}
+#install.packages("ISLR",dependencies=TRUE,repos="https://cloud.r-project.org")
+require(ISLR)
+#fix(Hitters)
+names(Hitters)
+dim(Hitters)
+sum(is.na(Hitters$Salary))
+Hitters=na.omit(Hitters)
+dim(Hitters)
+sum(is.na(Hitters))
+```
+
+```{r}
+# Prepare x, y for the glmnet syntax
+x<-model.matrix(Salary~.,Hitters)[,-1]
+y<-Hitters$Salary
+```
+
+```{r}
+#install.packages("glmnet",dependencies=TRUE,repos="https://cloud.r-project.org")
+require(glmnet)
+```
+
+####  A grid of lambda values
+
+```{r}
+# When lambda goes to infinity penalization on coefficients beta01 through beta19 is so high 
+# that it pushes all of them down to zero, resulting in a model with no predictors, only the intercept term.
+#
+# Syntax: 
+# alpha=0 is for ridge regression
+# alpha=1 is for 'lasso'  regression (cfr. below)
+#
+grid<-10^seq(10,-2,length=100)
+ridge.mod<-glmnet(x,y,alpha=0,lambda=grid)
+str(ridge.mod)
+```
+
+```{r}
+# Compare the beta regression coefficients with a large lambda (small absolute values)
+# and with a smaller lambda (larger absolute values).
+dim(coef(ridge.mod))
+round(ridge.mod$lambda[50],2)
+round(coef(ridge.mod)[,50],2)
+round(sqrt(sum(coef(ridge.mod)[-1,50]^2)),2)
+```
+
+```{r}
+round(ridge.mod$lambda[60],2)
+round(coef(ridge.mod)[,60],2)
+round(sqrt(sum(coef(ridge.mod)[-1,60]^2)),2)
+```
+
+```{r}
+# We extract now the regression coefficients with the 'predict' function
+round(predict(ridge.mod,s=50,type="coefficients")[1:20,],2)
+```
+
+```{r}
+# Split randomly the dataset into 'train' and 'test' subsets
+set.seed(1)
+train<-sample(1:nrow(x), nrow(x)/2)
+test<-(-train)
+y.test<-y[test]
+```
+
+```{r}
+# Adjust model with the 'train' subset
+ridge.mod<-glmnet(x[train,],y[train],alpha=0,lambda=grid, thresh=1e-12)
+#
+# Then we evaluate prediction error (sum of squares) on the 'test' subset for three lambda values
+# (lambda=4, lambda=1.0e10, lambda=0)
+#
+ridge.pred<-predict(ridge.mod,s=4,newx=x[test,])
+round(mean((ridge.pred-y.test)^2),2)
+```
+
+```{r}
+# The model with no predictors (other than the intercept) has always a predicted value equal to the mean of y
+# With a large lambda, the model tends to the no predictor one
+round(mean((mean(y[train])-y.test)^2),2)
+ridge.pred<-predict(ridge.mod,s=1e10,newx=x[test,])
+round(mean((ridge.pred-y.test)^2))
+```
+
+```{r}
+# With lambda equal to zero, the ridge regression model reduces to ordinary least squares
+#
+## Warning
+#
+# predict.glmnet with 'exact' computation requires re-entering the original training dataset
+#
+ridge.pred<-predict(ridge.mod,x=x[train,],y=y[train],s=0,newx=x[test,],exact=TRUE)
+round(mean((ridge.pred-y.test)^2),2)
+```
+
+```{r}
+# Same, with no 'exact' computation
+#
+ridge.pred<-predict(ridge.mod,s=0,newx=x[test,])
+round(mean((ridge.pred-y.test)^2),2)
+```
+
+```{r}
+# Compare an ordinary least squares regression with ridge regression with lambda=0 
+ols<-lm(Salary~.,data=Hitters, subset=train)
+summary(ols)
+```
+
+```{r}
+ols.yhat<-predict.lm(ols,newdata=Hitters[test,],type="response")
+str(ols.yhat)
+```
+
+```{r}
+ols.residuals<-ols.yhat-y.test
+round(mean(ols.residuals^2),2)
+```
+
+```{r}
+ridge.yhat<-predict(ridge.mod,x=x[train,],y=y[train],s=0,newx=x[test,],exact=TRUE)
+#ridge.yhat<-predict(ridge.mod,s=0,newx=x[test,],type="response")
+ridge.residuals<-ridge.yhat-y.test
+round(mean(ridge.residuals^2),2)
+```
+
+```{r}
+# There is a k-fold cross-validation feature in the glmnet package which we can take advantege of
+# 
+# By default k=10
+set.seed(1)
+cv.out<-cv.glmnet(x[train,],y[train],alpha=0)
+plot(cv.out)
+```
+
+```{r}
+bestlam<-cv.out$lambda.min
+round(bestlam,3)
+round(log(bestlam),3)
+plot(cv.out)
+abline(v=log(bestlam),lwd=3,col="cyan")
+```
+
+```{r}
+# Mean quadratic error with the optimal lambda and the full dataset
+# 
+# Coefficients of this model
+#
+# We observe that none of these coefficients is zero, hence there is no variable selectioin in ridge regression. 
+# To be compared with the lasso below.
+ridge.pred<-predict(ridge.mod,s=bestlam,newx=x[test,])
+round(mean((ridge.pred-y.test)^2),3)
+out<-glmnet(x,y,alpha=0)
+round(predict(out,type="coefficients",s=bestlam)[1:20,],3)
+```
+
+# A2. Regression with the _Lasso_ 
+
+## Same `Hitters` dataset as above and `glmnet`
+
+```{r}
+# The same glmnet function performs lasso regression, setting the parameter alpha=1 
+#
+lasso.mod<-glmnet(x[train,],y[train],alpha=1,lambda=grid)
+plot(lasso.mod)
+```
+
+```{r}
+set.seed(1)
+cv.out<-cv.glmnet(x[train,],y[train],alpha=1)
+plot(cv.out)
+bestlam<-cv.out$lambda.min
+```
+
+```{r}
+round(bestlam,3)
+round(log(bestlam),3)
+plot(cv.out)
+abline(v=log(bestlam),lwd=3,col="cyan")
+```
+
+```{r}
+# Quadratic error on the test subset with the optimal lambda 
+lasso.pred<-predict(lasso.mod,s=bestlam,newx=x[test,])
+round(mean((lasso.pred-y.test)^2),3)
+```
+
+### The variable selection feature of the _Lasso_
+
+```{r}
+# Quadratic error on the full dataset with the optimal lambda
+# Coefficients in this model:
+#
+# Now we see there are zero coefficients: this is equivalent to discarding these variables.
+#
+# Compare with the ridge regression above
+#
+out<-glmnet(x,y,alpha=1,lambda=grid)
+lasso.coef<-predict(out,type="coefficients",s=bestlam)[1:20,]
+round(lasso.coef,3)
+round(lasso.coef[lasso.coef!=0],3)
+```
+
+# B. Orthogonalization methods
+
+## Following  ISLR - Cap 6 - Laboratory 3 - PCR and PLS 
+
+[Codi de la web ISLR](http://www-bcf.usc.edu/~gareth/ISL/Chapter%206%20Labs.txt)
+
+```{r}
+#install.packages("pls",dependencies=TRUE,repos="https://cloud.r-project.org")
+require(pls)
+```
+
+# B1. Principal Components Regression (PCR)
+
+```{r}
+# Principal Components Regression
+set.seed(2)
+pcr.fit<-pcr(Salary~., data=Hitters,scale=TRUE,validation="CV")
+summary(pcr.fit)
+```
+
+```{r}
+validationplot(pcr.fit,val.type="MSEP")
+```
+
+```{r}
+# Cross-validation with hold-out
+#
+# Training the model, selecting number of principal components included in the model
+set.seed(1)
+pcr.fit<-pcr(Salary~., data=Hitters,subset=train,scale=TRUE, validation="CV")
+validationplot(pcr.fit,val.type="MSEP")
+```
+
+```{r}
+# The minimum of the graph (optimal number of orthogonal variables) appears at 5 variables (principal components).
+# Fit the model for this number
+pcr.pred<-predict(pcr.fit,x[test,],ncomp=5)
+round(mean((pcr.pred-y.test)^2),3)
+pcr.fit<-pcr(y~x,scale=TRUE,ncomp=5)
+summary(pcr.fit)
+```
+
+# B2. Partial Least Squares (PLS)
+
+```{r}
+# Partial Least Squares
+set.seed(1)
+pls.fit<-plsr(Salary~., data=Hitters,subset=train,scale=TRUE, validation="CV")
+summary(pls.fit)
+```
+
+```{r}
+validationplot(pls.fit,val.type="MSEP")
+```
+
+```{r}
+# The minimum of the graph (optimal number of orthogonal variables) appears at 2 variables.
+# Fit the model for this number
+pls.pred<-predict(pls.fit,x[test,],ncomp=2)
+round(mean((pls.pred-y.test)^2),3)
+pls.fit<-plsr(Salary~., data=Hitters,scale=TRUE,ncomp=2)
+summary(pls.fit)
+```
+
+```{r}
+```
