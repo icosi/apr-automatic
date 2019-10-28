@@ -1,0 +1,34 @@
+ 
+Nota: 6.50
+
+Comentarios:
+
+    Correcto lo que hay escrito, pero faltan explicaciones de lo que haces.
+
+    El notebook debería tener un encabezamiento con título, fecha y nombre de autor(es).
+    
+    Para preparar el conjunto de entrenamiento tomas siempre los primeros individuos de la
+    muestra, tal y como vienen:
+    
+    tvTrain <- Advertising[0:indexTrain,1]
+
+    Ésto no es correcto. Debe ser un subconjunto aleatorio, pues puede ocurrir que la muestra
+    venga ordenada de alguna manera no homogénea. O bien permutas antes toda la muestra y tomas
+    para entrenamiento _los primeros 'n.train' de la muestra permutada_ o bien extraes
+    una muestra aleatoria  de 'n.train' individuos. En ambos casos con la función 'sample()'.
+    
+    No veo por qué incluyes las funciones 'knn.class()', 'knn.prep()' que no se usan para nada.
+    Se trata aquí de regresión.
+    
+    Sólo usas 'k=3'. Deberías usar varios valores y, en cada caso, quedarte con el mejor.
+    
+    Atención! Índices como: Advertising[0:indexTrain,1]
+    
+    En R los índices de vectores, etc., van de 1 a n (no como en python donde van de 0 a n-1).
+    Aquí el índice 0 no existe legalmente. Aparentmente  el intérprete convierte directamente el
+    índice 0 en un 1,  pero no me consta que ésto esté documentado.
+    
+    Mira en el help de 'plot()' el uso de 'pch' ("plot character") y 'cex' para mejorar
+    la apariencia de los gráficos.
+    
+    Donde pone "Mean Squared Predictors:" debería poner "Mean Squared Prediction Error"
