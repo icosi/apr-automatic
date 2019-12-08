@@ -1,0 +1,640 @@
+---
+output:
+  pdf_document: default
+  html_document: default
+---
+# Classification 01 - Linear classification methods
+
+#### Josep Fortiana 2019-10-23
+
+This laboratory is almost entirely devoted to linear classification methods, plus two exceptions, Quadratic discriminant and the $k$-Nearest Neighbours method, at the end of the notebook.
+
+Linear methods of classification are those where the assignation criterion is based on values of a linear combination of the predictor variables, or several such combinations when the number $g$ of classes is greater than $2$. 
+
+Classification methods in general have a geometrical description as a partition of the predictor space (the space whose coordinates are the predictor variables) into two or more regions, one for each class. In linear methods separation is by one or more hyperplanes.
+
+# A. Linear classification by least squares
+
+In principle a linear regression by least squares is not an adequate classification method to obtain a hyperplane to separate two classes, or to predict class labels when there are more than two classes.
+
+However methodologically unsound it may seem and, as a matter of fact, it is indeed, we can define, in binary classification problems, a numerical response with two conventional values, for instance 0/1, or (-1)/(+1), or in multi-class classification problems, we can define a vector response with as many 0/1 indicator variables as the number $g$ of classes, all of them but one set to $0$, and the remaining one set to $1$, _(one-hot coding),_ fit a linear model in the binary problem, or $g$ parallel linear models in the multi-class problem and then assess the results.
+
+Even though results need adaptation or reinterpretation, as regression predicted values are not restricted to the discrete set of values with which the training set has been prepared, often results are surprisingly acceptable, especially when the problem is close to being linearly seeparable.
+
+## A1. `wine` data
+
+`wine` data are the results of a chemical analysis of wines grown in the same region in Italy but derived from three different cultivars. The analysis determined the quantities of 13 constituents found in each of the three types of wines.
+
+They can be found in the [UCI Machine Learning Repository](http://archive.ics.uci.edu/ml/), which hosts many documented data sets to be used as benchmarks in evaluating Machine Learning methods and algorithms. Alternatively, should the link be broken, you can find the `.csv` file in the Virtual Campus. The following description is taken from the UCI website:
+
+I think that the initial data set had around 30 variables, but for some reason I only have the 13 dimensional version. I had a list of what the 30 or so variables were, but a.) I lost it, and b.), I would not know which 13 variables are included in the set.
+
+The attributes are:
+
+01. Alcohol
+
+02. Malic acid
+
+03. Ash
+
+04. Alcalinity of ash
+
+05. Magnesium
+
+06. Total phenols
+
+07. Flavonoids
+
+08. Nonflavonoid phenols
+
+09. Proanthocyanins
+
+10. Color intensity
+
+11. Hue
+
+12. OD280/OD315 of diluted wines
+
+13. Proline
+
+
+In a classification context, this is a well posed problem with "well behaved" class structures. A good data set for first testing of a new classifier, but not very challenging.
+
+Since the `.csv` file has no first row with variable names we must set `header=FALSE` in the `read.csv` call (see default values for the optional parameters in the help). 
+
+The casting `as.factor()` command has the purpose of conveying the fact that this variable is qualitative, so the R interpreter can use it as such.
+
+```{r}
+wine.url<-"http://archive.ics.uci.edu/ml/machine-learning-databases/wine/wine.data"
+#wine<-read.csv(wine.url,header=FALSE)
+wine<-read.csv("wine.csv",header=FALSE)
+colnames(wine)<-c("Type","Alcohol","Malic","Ash", "Alcalinity","Magnesium","Phenols","Flavonoids",
+                  "Nonflavonoids","Proanthocyanins","Color","Hue", "Dilution","Proline")
+wine$Type <- as.factor(wine$Type)
+```
+
+```{r}
+str(wine$Type)
+levels(wine$Type)
+table(wine$Type)
+```
+
+Split the dataset in two subsets, for cross-validation, `train` with about $60\%$ of data, and  `test` with the remaining $\approx40\%$.
+
+```{r}
+n<-nrow(wine)
+ntrain<-ceiling(0.6*n)
+ntest<-n-ntrain
+set.seed(24025)  # some arbitrary value, for the sake of reproducible results
+Itrain<-sample(1:n,ntrain,replace=FALSE)
+wine.train<-wine[Itrain,]
+wine.test<-wine[-Itrain,]
+```
+
+Prepare a `Y` vector response with the one-hot coding of the three levels-valued factor response `wine$Type`.
+
+Create  `wine2`, a new `data.frame` appending the new three binary variables and discarding the old factor.
+
+```{r}
+y<-wine$Type
+Y<-cbind((y=="1"),(y=="2"),(y=="3"))
+colnames(Y)<-c("Y1","Y2","Y3")
+wine2<-data.frame(wine[,-1],Y)
+wine2.train<-wine2[Itrain,]
+wine2.test<-wine2[-Itrain,]
+```
+
+Fit three parallel linear models with the same set of predictors:
+
+```{r}
+wine2.lm1<-lm(cbind(Y1,Y2,Y3)~.,data=wine2.train)
+summary(wine2.lm1)
+```
+
+We can further analyze the model(s), for instance selecting an optimal predictor subset. This is not so easy as in a single `lm`, as predictors can, and in general do, have different predictive power for each binary response.
+
+```{r}
+#
+#
+#
+```
+
+On the other hand, `predict.lm()` works here as expected. We prepare the test `data.frame` for prediction, by removing the response columns and keeping them aside for later use in assessing predictions:
+
+```{r}
+wine2.test.to.predict<-wine2.test[,-(14:16)]
+```
+
+Run prediction. Check the structure of the resulting `Yhat`.
+Indeed `Yhat` is a matrix with 3 columns.
+
+Observe that each row in `Yhat` adds up to 1 (Can you explain why?). 
+
+```{r}
+Yhat<-predict(wine2.lm1,newdata=wine2.test.to.predict)
+str(Yhat)
+Yhat.sums<-as.numeric(apply(Yhat,1,sum))
+t(Yhat.sums)
+```
+
+Entries in `Yhat` are not $0$'s or $1$'s as entries in $Y$; they even do not belong to the $(0,1)$ interval, which is a cause of ambiguity in classifications. See the first $5$ rown in `Yhat
+
+This is a reason why this method is not a usual one in classification. Anyway we stick to it as an exercise.
+
+```{r}
+round(Yhat[1:5,],3)
+```
+
+There are several possibilities to force `Yhat` into a matrix with a _one-hot_ coding which can be directly read as a classification prediction.
+
+What we will do is to assign each individual to the class (column) of the maximum value in the row. 
+
+We compute the `Yhat.ind` matrix with three columns, which has in each $i$-th row the three indicators, for $j=1,2,3$, of `Yhat[i,j]` equalling the maximum in `Yhat[i,]`:
+
+```{r}
+Yhat.max<-apply(Yhat,1,max)
+Yhat.ind<-1*cbind(Yhat[,1]==Yhat.max,Yhat[,2]==Yhat.max,Yhat[,3]==Yhat.max)
+```
+
+### Confusion matrix
+
+This is a general object in visualizing the quality of a classification algorithm. The _confusion matrix_ for a classification problem with $g$ classes is a matrix $C$ with $g$ rows and $g$ columns.  
+
+The classification algorithm is applied to a test data subset in which the true class of each sample is known. In each $i$-th row of $C$ the entry in the $j$-th column is the number of samples whose true class is $i$ which the algorithm has assigned to the $j$-th class. 
+
+A perfect classification would yield a diagonal confusion matrix (with non-null entris oly on the principal diagonal). 
+
+Measures of quality can be derived from the proportion of off-diagonal entries, either row-wise or globally. For instance the sum of all off-diagonal entries divided by the total sample size is an estimate of the probability of misclassification.
+
+A computation of the confusion matrix by means of a matrix product. (NB: possible here because both `Y`and `Yhat` are three column matrices with zeros and ones!):
+
+```{r}
+Y.test<-Y[-Itrain,]
+C<-t(Y.test)%*%Yhat.ind
+dimnames(C)<-list(True=c(1,2,3),Predicted=c(1,2,3))
+C
+```
+
+Another procedure which, by the way, is more generalizable to other classification methods:
+
+```{r}
+y.test<-y[-Itrain]
+yhat<-as.factor(apply(Yhat,1,which.max))
+C<-table("True"=y.test,"Predicted"=yhat)
+C
+```
+
+# B. Linear classification by logistic regression
+
+As explained in the theory slides, logistic regression is a statistical model, an instance of a Generalized Linear Model (GLM) which is usually fitted by Maximum Likelihood.
+
+Its R implementation is in the `glm()` function from the `stats` package (loaded by default). Syntax is similar to that of `lm()`. See details in the help, which you can invoke by typing `?glm`.
+
+## B1. `SAheart` data
+
+From the `ElemStatLearn` package, `SAheart` is a data frame with 462 observations on the following 10 variables.
+
+01. `sbp`: systolic blood pressure.
+
+02. `tobacco`: cumulative tobacco (kg).
+
+03. `ldl`: low density lipoprotein cholesterol.
+
+04. `adiposity`: a numeric vector.
+
+05. `famhist`: family history of heart disease, a factor with levels `Absent`, `Present`.
+
+06. `typea`: type-A behavior.
+
+07. `obesity`: a numeric vector.
+
+08. `alcohol`: current alcohol consumption.
+
+09. `age`: age at onset
+
+10. `chd`: response, coronary heart disease
+
+##### Details
+
+A retrospective sample of males in a heart-disease high-risk region of the Western Cape, South Africa. There are roughly two controls per case of CHD. Many of the CHD positive men have undergone blood pressure reduction treatment and other programs to reduce their risk factors after their CHD event. In some cases the measurements were made after these treatments. These data are taken from a larger dataset, described in Rousseauw et al, 1983, South African Medical Journal.
+
+```{r}
+#install.packages("ElemStatLearn",dependencies=TRUE,repos="https://cloud.r-project.org")
+require(ElemStatLearn)
+data(SAheart)
+str(SAheart)
+```
+
+The response `chd` is coded as an integer-valued variable with $0/1$ values. For some classification procedures we should recode it as a factor with two levels, as we did with the `wine` data. Logistic regression does not require this step, as it will process correctly with the current coding. However keep in mind this feature before applying other classification methods  on this dataset (see below).
+
+Split the dataset into a pair $(\text{train},\text{test})$ of subsets.
+
+```{r}
+set.seed(24025)
+n<-nrow(SAheart)
+ntrain<-ceiling(0.60*n)
+Itrain<-sample(1:n,ntrain,replace=FALSE)
+n<-nrow(SAheart)
+ntrain<-ceiling(0.60*n)
+Itrain<-sample(1:n,ntrain,replace=FALSE)
+SAheart.train<-SAheart[Itrain,]
+SAheart.test<-SAheart[-Itrain,]
+```
+
+Before applying logistic regression, we can try to classify `SAheart` data by the least squares method and estimate the misclassification probability.
+
+```{r}
+#
+#
+#
+```
+
+Syntax for `glm`
+
+```{r}
+SAheart.logit1<-glm(chd~.,data=SAheart.train,family=binomial)
+```
+
+```{r}
+summary(SAheart.logit1)
+```
+
+The summary of `glm()` is similar to that of `lm()`, including the $p$-values giving some indication about the coefficients significance.
+
+The (Residual) `Deviance` is a quantity equivalent to the Residual Sum of Squares in a `lm()`.
+
+Another consequence of the fact that `glm()` fits a statistical model is the possibility of predictor selection by means of a `step()` functions just as in `lm()`. For instance:
+
+```{r}
+step(SAheart.logit1)
+```
+
+Selects a model:
+
+```{r}
+sel.model<-chd ~ tobacco + ldl + famhist + typea + age
+```
+
+where `sbp`, `adiposity`, `obesity`, `alcohol` have been removed from the list of predictors. We can fit the selected model:
+
+```{r}
+SAheart.logit2<-glm(sel.model,data=SAheart.train,family=binomial)
+summary(SAheart.logit2)
+```
+
+Syntax of `predict.glm()` to compute probabilities of belonging to each class.
+
+Actually probabilities of the binary $0/1$  response taking the value $1$ (here `chd=1`).
+
+```{r}
+SAheart.pred<-predict(SAheart.logit2,newdata=SAheart.test[,c(2,3,5,6,9)],type="response")
+str(SAheart.pred)
+```
+
+If a _crisp_ assignation to `0` or `1` is required, one has to decide a cut point, for instance $L=0.5$ (this value is not mandatory, it can depend on the model or on the _a priori_ probabilities) and classify as $0$ or $1$ depending on whether the probability is higher or lower than this threshold:
+
+Confusion matrix for this classification:
+
+```{r}
+SAheart.pred.crisp<-1*(SAheart.pred>=0.5)
+C<-table("True"=SAheart.test$chd,"Predicted"=SAheart.pred.crisp)
+C
+```
+
+#### Some internal details about computations in logistic regression
+
+In the slides `Detalles.Reg.Logistica.slides.esp.pdf` you can find an explanation of the logistic regression model and of the numerical procedure used to obtain the maximum likelihood estimates of the model coefficients. 
+
+It is a variant of the Newton-Raphson optimization method, which results in an iterative computation by successive approximations,  where each step is equivalent to a Weighted Least Squares fit, with the weight for each sample is updated for each step. The procedure is called IWLS or IRLS, meaning Iteratively (Re)Weighted Least Squares. 
+
+In the `IWLS.r` script you can see a simple implementation of this algorithm.
+
+The `separation.txt` data shows a case of non-existence of a Maximum Likelihood estimate for the logistic regression models. Try these data with the `IWLS()`  function in `IWLS.r` and with the `glm()` function.
+
+```{r}
+#
+#
+#
+```
+
+## B2. `Default` dataset
+
+From the `ISLR` package. A simulated data set containing information on ten thousand customers. The aim here is to predict which customers will default on their credit card debt.
+
+A data frame with 10000 observations on the following 4 variables.
+
+01. `default`: A factor with levels `No` and `Yes` indicating whether the customer defaulted on their debt
+
+02. `student`: A factor with levels `No` and `Yes` indicating whether the customer is a student
+
+03. `balance`: The average balance that the customer has remaining on their credit card after making their monthly payment
+
+04. `income`: Income of customer
+
+```{r}
+#install.packages("ISLR",dependencies=TRUE,repos="https://cloud.r-project.org")
+require(ISLR)
+data(Default)
+str(Default)
+```
+
+### Fitting the logistic regression model
+
+```{r}
+Default.logit1<-glm(default~balance,family=binomial,data=Default)
+summary(Default.logit1)
+round(coefficients(Default.logit1),4)
+```
+
+#### Making prediction for new cases
+
+The output of `predict()`is to be interpreted as a probability of `Default=Yes`
+
+```{r}
+round(predict(Default.logit1,newdata=data.frame(balance=1000),type="response"),5)
+```
+
+A larger balance makes default more likely.
+
+```{r}
+round(predict(Default.logit1,newdata=data.frame(balance=2000),type="response"),5)
+```
+
+#### Logistic regression with a categorical predictor:  `student`
+
+```{r}
+Default.logit2<-glm(default~student,family=binomial,data=Default)
+summary(Default.logit2)
+round(coefficients(Default.logit2),4)
+```
+
+```{r}
+head(model.matrix(Default.logit2))
+```
+
+#### Logistic regression with several predictors
+
+```{r}
+Default.logit3<-glm(default~.,family=binomial,data=Default)
+summary(Default.logit3)
+```
+
+#### Using `step()` to select an optimal predictor subset
+
+```{r}
+step(Default.logit3)
+```
+
+# C. Fisher linear discriminant
+
+Fisher's discriminant is the oldest method of classification from several predictor variables. It was introduced by Ronald A. Fisher (1936) _"The Use of Multiple Measurements in Taxonomic Problems"._ Also this article features, as an illustration, the famous _Iris flowers_ dataset for a problem of classification into three classes, _"Iris setosa",_ _"Iris virginica",_ and _"Iris versicolor",_ from four numerical variables, _"Sepal width",_ _"Sepal length",_ _"Petal width",_ _"Petal length"._
+
+As with all linear discriminant methods, it is more successful when the distribution of data in the predictor space is given by a mixture of Gaussian (multivariate normal) distributions. Geometrically when the set of individuals-points in each class  has an ellipsoidal shape around its centroid, its mean. Actually a probabilistic derivation of Fisher discriminant functions
+assumes classes modelled by Gaussian distributions with a common matrix of variances and covariances (shortly covariances matrix). There is a purely geometrical derivation in terms of distances between individuals. A nice visual explanation can be found in the blog entry [An illustrative introduction to Fisher's Linear Discriminant](https://sthalles.github.io/fisher-linear-discriminant/).
+
+Among the many implementations of Fisher's linear discriminant we can use the `lda` function is the `MASS` package.
+
+## C1. `Iris` dataset
+
+The default `datasets` package in the standard R distribution contains this dataset in two formats: `iris` and `iris3`. We use here the first version, a `data.frame` with the five variables:
+
+ 01. `Sepal.Length`: Continuous numerical. 
+ 02. `Sepal.Width`: Continuous numerical. 
+ 03. `Petal.Length`: Continuous numerical. 
+ 04. `Petal.Width`: Continuous numerical. 
+ 05. `Species`: Factor with three levels: `'setosa'` `'versicolor'` `'virginica'`.
+
+```{r}
+data(iris)
+str(iris)
+levels(iris$Species)
+table(iris$Species)
+```
+
+#### Prepare two subsets for training and testing
+
+```{r}
+n<-nrow(iris)
+ntrain<-ceiling(0.6*n)
+set.seed(24025)         # An arbitrary value, fixed for the sake of reproducibility of results
+Itrain<-sample(1:n,ntrain,replace=FALSE)
+iris.train<-iris[Itrain,]
+iris.test<-iris[-Itrain,]
+```
+
+#### Evaluate the linear discriminant
+
+```{r}
+require(MASS)
+iris.lda<-lda(Species~.,data=iris.train)
+iris.pred<-predict(iris.lda,newdata=iris.test)
+C<-table("True"=iris.test$Species,"Predicted"=iris.pred$class)
+C
+```
+
+There is a `plot.lda` method for objects of class `lda` (the output of the `lda()` function). See the help file.
+
+```{r}
+options(repr.plot.width=5, repr.plot.height=5)
+plot(iris.lda,cex=0.6,col=c("red","blue","black"),abbrev=2)
+```
+
+There is an `ldahist` function, to visualize distributions of individual predictor variables across groups. It can plot either histograms, or density estimates (kernel smoothing, see the help of the R `density` function), or both. Some trial and error fine tuning of optional parameters is advisable. For instance when plotting density estimates, it may happen that the bandwidth smoothing parameter `width` default value computation crashes and it must be set by hand. Other graphical parameters are difficult (or impossible, I don't know which) to set, hence this function has a limited usefulness.
+
+```{r}
+options(repr.plot.width=4, repr.plot.height=5)
+ldahist(iris$Sepal.Length,iris$Species,type="histogram")  # this is the default
+```
+
+```{r}
+ldahist(iris$Sepal.Length,iris$Species,type="density",lwd=3)
+```
+
+```{r}
+ldahist(iris$Sepal.Length,iris$Species,type="both",lwd=2,col="blue")
+```
+
+```{r}
+ldahist(iris$Sepal.Width,iris$Species)
+```
+
+```{r}
+ldahist(iris$Petal.Length,iris$Species)
+```
+
+```{r}
+ldahist(iris$Petal.Width,iris$Species)
+```
+
+#### Built-in _leave-one-out_ cross-validation
+
+```{r}
+iris.lda.CV<-lda(Species~.,data=iris, CV=TRUE)
+#str(iris.lda.CV)
+C<-table("True"=iris$Species,"LOO Predicted"=iris.lda.CV$class)
+C
+```
+
+## C2. `SAheart` dataset
+
+As we saw above, originally the response variable `chd` is numerically coded with $0/1$ values. This is not an obstacle for logistic regression or with `lda`. For some other methods, it will be an issue. For instance the Clasification and Regression Trees function `rpart()` requires the response variable in a classification to be a factor, otherwise it will perform a regression.
+
+Similarly,  the `glm()` function we use to fit logistic regression, is capable of dealing with qualitative predictor variables, by constructing a design matrix with the appropriate indicator variables. In this dataset, one of the risk factors, `famhist`, appears as a factor with two levels. It might be necessary to recode it either as a numeric variable or to obtain the `model.matrix` by a dummy call to `lm()`or `glm()`.
+
+In any case to be on the safe side, better check capabilities of any given function before blindly using it.
+
+```{r}
+SAheart.lda1<-lda(chd~.,data=SAheart.train)
+```
+
+```{r}
+SAheart.pred<-predict(SAheart.lda1,newdata=SAheart.test)
+C<-table("True"=SAheart.test$chd,"Predicted"=SAheart.pred$class)
+C
+```
+
+# D. Quadratic discriminant
+
+Quadratic discriminant can be considered as an slight extension of Fisher's linear discriminant. Thus it is reasonable to study it here even though it is not linear. It has a probabilistic derivation like that of Fisher's LD, relaxing the assumption that groups are modelled as Gaussians with a common covariances matrix to Gaussians, each with its own covariances matrix.
+
+Implemented in the `qda()` function, `MASS` package.
+
+## D1. `SAheart` dataset
+
+```{r}
+SAheart.qda1<-qda(chd~.,data=SAheart.train)
+SAheart.pred<-predict(SAheart.qda1,newdata=SAheart.test)
+C<-table("True"=SAheart.test$chd,"Predicted"=SAheart.pred$class)
+C
+```
+
+## D2. `Smarket` dataset
+
+This is an S&P Stock Market Data set. Daily percentage returns for the S&P 500 stock index between 2001 and 2005.
+Contained in the `ISLR` package as a `data.frame` with 1250 observations on the following 9 variables.
+
+01. `Year`: The year that the observation was recorded
+
+02. `Lag1`: Percentage return for previous day
+
+03. `Lag2`: Percentage return for 2 days previous
+
+04. `Lag3`: Percentage return for 3 days previous
+
+05. `Lag4`: Percentage return for 4 days previous
+
+06. `Lag5`: Percentage return for 5 days previous
+
+07. `Volume`: Volume of shares traded (number of daily shares traded in billions)
+
+08. `Today`: Percentage return for today
+
+09. `Direction`: A factor with levels `Down` and `Up` indicating whether the market had a positive or negative return on a given day
+
+```{r}
+require(ISLR)
+data(Smarket)
+str(Smarket)
+```
+
+```{r}
+summary(Smarket)
+```
+
+```{r}
+round(cor(as.matrix(Smarket[,-9])),2)
+```
+
+## The `corrplot` package
+
+Useful visualization of correlation matrices, especially with a large number of variables. 
+
+See this [Vignette](https://cran.r-project.org/web/packages/corrplot/vignettes/corrplot-intro.html) and examples in the package help.
+
+```{r}
+#install.packages("corrplot",dependencies=TRUE,repos="https://cloud.r-project.org")
+require(corrplot)
+```
+
+```{r}
+R<-cor(Smarket[,-9])
+```
+
+```{r}
+options(repr.plot.width=3.0, repr.plot.height=2.8)
+corrplot(R, method = "ellipse",type="upper",tl.cex=0.6,cl.cex=0.6)
+```
+
+## Classification with `Smarket`, following Section 4.6 - Lab in the ISLR book
+
+[Code from the ISLR book](http://faculty.marshall.usc.edu/gareth-james/ISL/Chapter%204%20Lab.txt)
+
+### Logistic Regression
+
+### With Fisher's linear discriminant
+
+### Quadratic Discriminant Analysis
+
+# E. $k$ Nearest Neighbours (k-NN) classification
+
+This _non-linear_ method clearly does not belong in a chapter on linear classification. Nevertheless it is easy both to describe and to implement, hence a useful reference for comparison to more sophisticated method.
+
+It requires a proximity or distance function in the predictor space, with which we evaluate the distances from a new case to be classified to each case in the learning dataset (whose class is already known). We select a positive integer $k$ (smaller than the number of cases in the learning dataset). Then the new observation is assigned to the  majority  class in the set of $k$ nearest cases in the learning dataset.
+
+In addition to being non-linear, $k-NN$ is the _most_ opposite method to those described above, in the sense of being _local,_ that is, the prediction function is constructed just within a neighbourhood of the new case, whereas in all previous methods the classification criterion is a partition of the predictor space by a _globally defined_ hyperplane. Different methods (least squares, logistic regression, Fisher discriminant) differ in the procedure used to derive this hyperplane.
+
+## E1. With the `wine` dataset
+
+```{r}
+wine.url<-"http://archive.ics.uci.edu/ml/machine-learning-databases/wine/wine.data"
+#wine<-read.csv(wine.url,header=FALSE)
+wine<-read.csv("wine.csv",header=FALSE)
+colnames(wine)<-c("Type","Alcohol","Malic","Ash", "Alcalinity","Magnesium","Phenols","Flavonoids",
+                  "Nonflavonoids","Proanthocyanins","Color","Hue", "Dilution","Proline")
+wine$Type <- as.factor(wine$Type)
+```
+
+```{r}
+str(wine$Type)
+levels(wine$Type)
+table(wine$Type)
+```
+
+Split the dataset in two subsets, for cross-validation, `train` with about $60\%$ of data, and  `test` with the remaining $\approx40\%$.
+
+```{r}
+n<-nrow(wine)
+ntrain<-ceiling(0.6*n)
+ntest<-n-ntrain
+set.seed(24025)  # some arbitrary value, for the sake of reproducible results
+Itrain<-sample(1:n,ntrain,replace=FALSE)
+wine.train<-wine[Itrain,]
+wine.test<-wine[-Itrain,]
+```
+
+```{r}
+Xtrain<-as.matrix(wine.train[,-1])
+ytrain<-wine.train[,1]
+Xtest<-as.matrix(wine.test[,-1])
+ytest<-wine.test[,1]
+```
+
+There is an implementation of k-NN classification in the `class` package.
+
+```{r}
+#install.packages("class",dependencies=TRUE,repos="https://cloud.r-project.org")
+require(class)
+```
+
+#### Confusion matrix
+
+```{r}
+k<-7
+y.hat<-knn(Xtrain,Xtest,ytrain,k )
+C<-table("True"=ytest,"Predicted"=y.hat)
+C
+```
+
+## E2. With `SMarket`, following Section 4.6 - Lab in the ISLR book
+
+## E3. Caravan Insurance Data
